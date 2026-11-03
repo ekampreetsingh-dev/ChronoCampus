@@ -195,8 +195,11 @@ export function AdminOverview() {
         }
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
-        <Stat label="Students" value={studentDirectory.length} sub={activeSession ? `in ${activeSession.name}` : 'no active session'} tone="brand" icon={Users2} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* The demo directory holds the student accounts that can sign in, not a
+            headcount of the school — labelling it "Students" beside 56 classes
+            reads as a contradiction, so it is named for what it is. */}
+        <Stat label="Student accounts" value={studentDirectory.length} sub="signable in the directory" tone="brand" icon={Users2} />
         <Stat label="Teaching staff" value={teachers.length} sub={`${admins.length} administrators`} tone="info" icon={Users} />
         <Stat label="Classes & sections" value={active.length} sub={`${sections.length} on record · ${classesRunning} grades`} tone="accent" icon={School} />
         <Stat
@@ -282,31 +285,12 @@ export function AdminOverview() {
             ) : !today.length ? (
               <EmptyState icon={CalendarClock} title="Nothing scheduled today" hint="Either the day is open or the timetable has not been built for it yet." />
             ) : (
-              <ul className="flex flex-col gap-1 m-0 p-0 list-none">
-                {today
-                  .slice()
-                  .sort((a, b) => Number(a.period) - Number(b.period))
-                  .map((s) => {
-                    const isNow = Number(s.period) === livePeriod
-                    const subbed = s.is_substitution
-                    const absent = absentIds.has(String(s.teacher_id))
-                    return (
-                      <li key={s.id} className={cx('flex items-center gap-2.5 px-2.5 py-2 rounded-[10px] min-w-0', isNow ? 'well' : 'hover:bg-[color:var(--hovered)] transition-colors')}>
-                        <span className="num text-2xs t3 w-[46px] shrink-0 tabular-nums">{periodAt(Number(s.period), periodsFor(s.class_section)).start}</span>
-                        <span className="text-xs font-semibold t1 w-[92px] shrink-0 truncate max-w-[92px]">{s.class_section}</span>
-                        <span className="text-sm t2 truncate flex-1 min-w-0">
-                          {s.subject} · {subbed ? s.substitute_teacher_name : s.teacher_name}
-                        </span>
-                        <span className="num text-2xs t3 shrink-0 hidden sm:inline">{roomShort(s.room)}</span>
-                        {subbed ? (
-                          <Chip tone="accent" className="shrink-0">covered</Chip>
-                        ) : absent ? (
-                          <Chip tone="danger" className="shrink-0">uncovered</Chip>
-                        ) : null}
-                      </li>
-                    )
-                  })}
-              </ul>
+              <TodayPreview
+                today={today}
+                livePeriod={livePeriod}
+                absentIds={absentIds}
+                onOpenFull={() => navigate('/admin/timetable')}
+              />
             )}
           </div>
         </Card>
@@ -420,7 +404,7 @@ export function AdminOverview() {
 
       <Card className="p-0">
         <CardHead title="Quick actions" sub="Jump straight to the desk that handles it." icon={Sparkles} />
-        <div className="px-5 pb-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
+        <div className="px-5 pb-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
           <QuickAction icon={Layers} title="Build timetable" sub="Assign and edit periods" onClick={() => navigate('/admin/timetable')} />
           <QuickAction icon={ArrowRightLeft} title="Substitute desk" sub="Cover absent teachers" onClick={() => navigate('/admin/substitutes')} />
           <QuickAction icon={TrendingUp} title="Workload analytics" sub="Balance across staff" onClick={() => navigate('/admin/workload')} />
@@ -431,6 +415,90 @@ export function AdminOverview() {
           <QuickAction icon={SettingsIcon} title="School settings" sub="Days & timings" onClick={() => navigate('/admin/settings')} />
         </div>
       </Card>
+    </div>
+  )
+}
+
+/**
+ * A dashboard preview, not the timetable. The school runs several hundred bells a
+ * day, so the panel leads with the current and next periods plus anything
+ * uncovered, and hands the rest to the dedicated page. Nothing is hidden from the
+ * school — Show more widens the same list, and the full board is one click away.
+ */
+function TodayPreview({ today = [], livePeriod, absentIds, onOpenFull }) {
+  const [expanded, setExpanded] = useState(false)
+  const PREVIEW = 6
+
+  const ordered = useMemo(() => {
+    const byTime = [...today].sort((a, b) => Number(a.period) - Number(b.period))
+    const problems = byTime.filter((s) => !s.is_substitution && absentIds.has(String(s.teacher_id)))
+    const head = byTime.filter((s) => Number(s.period) === livePeriod)
+    const next = byTime.filter((s) => Number(s.period) > livePeriod && !head.includes(s))
+    return [...head, ...problems, ...next]
+  }, [today, livePeriod, absentIds])
+
+  const shown = expanded ? ordered : ordered.slice(0, PREVIEW)
+  const classes = new Set(today.map((s) => s.class_section)).size
+  const covered = today.filter((s) => s.is_substitution).length
+  const uncovered = today.filter((s) => !s.is_substitution && absentIds.has(String(s.teacher_id))).length
+
+  return (
+    <div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3.5">
+        {[
+          ['Bells today', today.length, 'brand'],
+          ['Classes running', classes, 'sage'],
+          ['Covered', covered, 'accent'],
+          ['Uncovered', uncovered, 'danger'],
+        ].map(([label, value, tone]) => (
+          <div key={label} data-tone={tone} className="card-flat px-3 py-2 min-w-0">
+            <p className="meta truncate">{label}</p>
+            <p className="num text-md font-extrabold t1 leading-tight">{value}</p>
+          </div>
+        ))}
+      </div>
+
+      <ul className="flex flex-col gap-1 m-0 p-0 list-none">
+        {shown.map((s) => {
+          const isNow = Number(s.period) === livePeriod
+          const subbed = s.is_substitution
+          const absent = absentIds.has(String(s.teacher_id))
+          return (
+            <li
+              key={s.id}
+              className={cx(
+                'flex items-center gap-2.5 px-2.5 py-2 rounded-[10px] min-w-0',
+                isNow ? 'well' : 'hover:bg-[color:var(--hovered)] transition-colors',
+              )}
+            >
+              <span className="num text-2xs t3 w-[46px] shrink-0 tabular-nums">
+                {periodAt(Number(s.period), periodsFor(s.class_section)).start}
+              </span>
+              <span className="text-xs font-semibold t1 w-[86px] shrink-0 truncate">{s.class_section}</span>
+              <span className="text-sm t2 truncate flex-1 min-w-0">
+                {s.subject} · {subbed ? s.substitute_teacher_name : s.teacher_name}
+              </span>
+              <span className="num text-2xs t3 shrink-0 hidden sm:inline">{roomShort(s.room)}</span>
+              {subbed ? (
+                <Chip tone="accent" className="shrink-0">covered</Chip>
+              ) : absent ? (
+                <Chip tone="danger" className="shrink-0">uncovered</Chip>
+              ) : null}
+            </li>
+          )
+        })}
+      </ul>
+
+      <div className="flex flex-wrap items-center gap-2 mt-3.5">
+        {ordered.length > PREVIEW ? (
+          <Button size="sm" variant="ghost" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}>
+            {expanded ? 'Show less' : `Show all ${ordered.length}`}
+          </Button>
+        ) : null}
+        <Button size="sm" variant="quiet" tone="brand" className="ml-auto" iconRight={ArrowRight} onClick={onOpenFull}>
+          View full timetable
+        </Button>
+      </div>
     </div>
   )
 }
@@ -602,7 +670,7 @@ export function AdminTimetable() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Open cells" value={Math.max(0, capacity - filtered.length)} sub="click to assign" tone="brand" icon={Layers} />
         <Stat label="Substitutions live" value={slots.filter((s) => s.is_substitution).length} sub="across the week" tone="accent" icon={ArrowRightLeft} />
         <Stat

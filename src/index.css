@@ -503,6 +503,49 @@
 }
 
 /* ============================================================================
+   Responsive contract — one place, four bands. Tailwind v4 defaults are used so
+   the classes in JSX and these tokens agree:
+
+     base          < 768px   mobile   bottom bar + More sheet, no sidebar, no hamburger
+     md  768–1023px          tablet   hamburger + overlay drawer, no bottom bar, no rail
+     lg  1024–1279px         desktop  persistent sidebar (collapsible to a rail)
+     xl  ≥ 1280px            wide     sidebar expanded by default, wider gutters
+
+   Anything that must move between bands is driven by these two variables, never
+   by a magic number repeated in a component.
+   ========================================================================== */
+
+:root {
+  --nav-bar-h: 64px; /* fixed bottom navigation, mobile only */
+  --drawer-w: min(300px, 86vw);
+  --tap-min: 44px; /* WCAG 2.5.5 target size */
+}
+
+/* Narrow phones get a shorter bar so the sheet and content keep their room. */
+@media (max-width: 374px) {
+  :root {
+    --nav-bar-h: 58px;
+  }
+}
+
+/* Low-powered phones: keep the glass readable and cheap. Blur is the expensive
+   part of backdrop-filter, so the large surfaces drop it below 768px and rely on
+   their opaque fallback fill instead. */
+@media (max-width: 767px) {
+  .shell,
+  .topbar-glass {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .glass,
+  .glass-2,
+  .glass-3 {
+    backdrop-filter: blur(10px) saturate(1.3);
+    -webkit-backdrop-filter: blur(10px) saturate(1.3);
+  }
+}
+
+/* ============================================================================
    Glass elevations
    Declared inside @layer components so any Tailwind utility written on the same
    element (md:hidden, py-0, w-full…) still wins without needing !important.
@@ -576,6 +619,10 @@
   border: 1px solid var(--color-line-soft);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-inset);
+  /* A flex or grid item defaults to min-width:auto, which refuses to shrink below
+     its content — that is what let a wide table push past the shell and get
+     clipped instead of scrolling inside its own box. */
+  min-width: 0;
 }
 .card-flat {
   background: var(--well);
@@ -1100,6 +1147,16 @@
   border-radius: 13px;
   background: var(--well);
   border: 1px solid var(--color-line-soft);
+  /* A row of filters must never be wider than the screen. It scrolls inside its
+     own box instead of pushing the page into horizontal overflow. */
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+.seg::-webkit-scrollbar {
+  display: none;
 }
 .seg-item {
   display: inline-flex;
@@ -1116,6 +1173,8 @@
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
+  flex: none;
+  scroll-snap-align: start;
   transition: background 0.16s var(--ease-glass), color 0.16s, box-shadow 0.16s;
 }
 .seg-item:hover {
@@ -1130,6 +1189,58 @@
 [data-theme='dark'] .seg-item[aria-selected='true'],
 [data-theme='dark'] .seg-item.is-active {
   color: #c3ddfa;
+}
+
+/* Coarse pointers get the full 44px target even where the chip itself is small.
+   The visual stays compact; only the hit area grows, via padding plus min-size. */
+@media (pointer: coarse) {
+  .seg-item {
+    min-height: var(--tap-min);
+    padding: 10px 15px;
+  }
+  .icon-btn {
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+  }
+  .icon-btn-sm {
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+  }
+  .menu-item {
+    min-height: var(--tap-min);
+  }
+  .tab {
+    min-height: var(--tap-min);
+    padding-top: 13px;
+    padding-bottom: 13px;
+  }
+  /* Small action buttons and reaction chips are the two places the compact size
+     was still costing people a mistap. */
+  .btn-sm {
+    min-height: var(--tap-min);
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .react {
+    min-height: var(--tap-min);
+    padding-left: 13px;
+    padding-right: 13px;
+  }
+  /* Breadcrumb and back links are text-height by design; give them a real
+     tappable strip instead of a 16px line of glyphs. */
+  .tapline {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    padding-block: 4px;
+  }
+  nav[aria-label="Breadcrumb"] a,
+  nav[aria-label="Breadcrumb"] span {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 6px;
+  }
 }
 
 .tabs {
@@ -1170,6 +1281,121 @@
   border-bottom-color: #7ba4e6;
 }
 
+/* ------------------------------------------------- mobile navigation surfaces */
+
+/* Fixed bottom bar. Height comes from --nav-bar-h so the content padding and the
+   bar itself can never drift apart, and the safe-area inset is added on top. */
+.bottombar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 45;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  height: calc(var(--nav-bar-h) + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--color-line);
+  background: var(--glass-3);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+}
+
+.bottombar-item {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font-display);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.16s var(--ease-glass), color 0.16s;
+}
+.bottombar-item:hover {
+  color: var(--text-1);
+}
+.bottombar-item.is-active {
+  background: var(--selected);
+  color: var(--color-brand-ink);
+  box-shadow: 0 8px 20px -14px rgba(20, 40, 68, 0.55);
+}
+[data-theme='dark'] .bottombar-item.is-active {
+  color: #c3ddfa;
+}
+.bottombar-item svg {
+  flex: none;
+  stroke-width: 2.1;
+}
+.bottombar-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Slide-up navigation sheet. Full height is capped so a long admin list scrolls
+   inside the sheet rather than running off the bottom of the screen. */
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  max-height: min(76dvh, 620px);
+  padding: 0 0 calc(10px + env(safe-area-inset-bottom));
+  border-radius: 26px 26px 0 0;
+  background: var(--glass-3);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-bottom: none;
+  box-shadow: var(--shadow-pop), var(--shadow-inset);
+  backdrop-filter: blur(var(--glass-blur-3)) saturate(1.6);
+  -webkit-backdrop-filter: blur(var(--glass-blur-3)) saturate(1.6);
+  animation: sheet-up 0.3s var(--ease-glass);
+}
+[data-theme='dark'] .sheet {
+  border-color: rgba(206, 226, 248, 0.12);
+}
+.sheet-grabber {
+  width: 40px;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--color-line-strong);
+  margin: 9px auto 2px;
+  flex: none;
+}
+
+/* Tablet / mobile navigation drawer, opened from the hamburger. Distinct from
+   .drawer, which is the right-side detail panel used by the portals. */
+.nav-drawer {
+  position: relative;
+  z-index: 61;
+  height: 100%;
+  width: var(--drawer-w);
+  display: flex;
+  flex-direction: column;
+  background: var(--glass-3);
+  border-right: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: var(--shadow-pop);
+  backdrop-filter: blur(var(--glass-blur-3)) saturate(1.6);
+  -webkit-backdrop-filter: blur(var(--glass-blur-3)) saturate(1.6);
+  animation: drawer-in 0.28s var(--ease-glass);
+}
+[data-theme='dark'] .nav-drawer {
+  border-right-color: rgba(206, 226, 248, 0.12);
+}
+
 /* ============================================================================
    Tables
    ========================================================================== */
@@ -1182,6 +1408,9 @@
 }
 .tbl {
   width: 100%;
+  /* Columns keep their own width and the wrapper scrolls, rather than the table
+     crushing text to fit a phone. */
+  min-width: 640px;
   border-collapse: separate;
   border-spacing: 0;
   font-size: var(--text-sm);
@@ -1674,6 +1903,24 @@
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+@keyframes drawer-in {
+  from {
+    opacity: 0.4;
+    transform: translateX(-26px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
   }
 }
 @keyframes toast-in {

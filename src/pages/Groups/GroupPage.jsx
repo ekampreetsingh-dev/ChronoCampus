@@ -41,12 +41,14 @@ import {
 } from '../../components/ui/primitives'
 import ManageTeachers from './ManageTeachers'
 
+/** Same rule as the notification centre: a future post must not read as history. */
 const ago = (iso) => {
-  const t = new Date(iso).getTime()
-  const mins = Math.round((Date.now() - t) / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  if (mins < 1440) return `${Math.round(mins / 60)}h ago`
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
+  const future = mins < 0
+  const abs = Math.abs(mins)
+  if (abs < 1) return 'just now'
+  if (abs < 60) return future ? `in ${abs}m` : `${abs}m ago`
+  if (abs < 1440) return future ? `in ${Math.round(abs / 60)}h` : `${Math.round(abs / 60)}h ago`
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
 
@@ -93,7 +95,7 @@ export default function GroupPage({ base } = {}) {
   if (denied) {
     return (
       <div className="flex flex-col gap-4">
-        <Link to={`${root}/groups`} className="text-sm font-bold inline-flex items-center gap-1.5 w-fit">
+        <Link to={`${root}/groups`} className="tapline text-sm font-bold inline-flex items-center gap-1.5 w-fit">
           <ArrowLeft size={14} aria-hidden /> Back to my groups
         </Link>
         <Card>
@@ -117,7 +119,7 @@ export default function GroupPage({ base } = {}) {
 
   return (
     <div className="flex flex-col gap-5">
-      <Link to={`${root}/groups`} className="text-sm font-bold inline-flex items-center gap-1.5 w-fit">
+      <Link to={`${root}/groups`} className="tapline text-sm font-bold inline-flex items-center gap-1.5 w-fit">
         <ArrowLeft size={14} aria-hidden /> {role === 'student' ? 'My class group' : 'My groups'}
       </Link>
 

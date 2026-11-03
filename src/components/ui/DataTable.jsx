@@ -111,16 +111,18 @@ export function DataTable({
         <div className="flex flex-wrap items-center gap-2.5 px-3.5 py-3 border-b border-[color:var(--color-line-soft)]">
           {toolbar}
           {showSearch ? (
-            <div className="ml-auto flex items-center gap-2.5">
+            /* Full width on a phone, right-aligned from small screens up — a fixed
+               190px box pushed to the right left a stranded gap under the title. */
+            <div className="flex items-center gap-2.5 w-full sm:w-auto order-last sm:ml-auto">
               {searching ? (
                 <span className="num text-2xs t3 tabular-nums whitespace-nowrap">
                   {filtered.length} of {rows.length}
                 </span>
               ) : null}
-              <div className="relative">
+              <div className="relative flex-1 sm:flex-none">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 t3 pointer-events-none" aria-hidden />
                 <input
-                  className="input !h-9 !py-0 pl-8 pr-8 text-xs w-[190px]"
+                  className="input !h-9 !py-0 pl-8 pr-8 text-xs w-full sm:w-[190px]"
                   placeholder={searchPlaceholder}
                   value={typed}
                   onChange={(e) => setTyped(e.target.value)}
@@ -153,7 +155,7 @@ export function DataTable({
         </div>
       ) : (
         <div
-          className={stickyHeader ? 'scroll overflow-auto' : 'overflow-x-auto scroll'}
+          className="scroll min-w-0 overflow-x-auto overflow-y-auto"
           style={stickyHeader ? { maxHeight: maxHeight || 'min(70vh, 640px)' } : undefined}
         >
           <table className="tbl">

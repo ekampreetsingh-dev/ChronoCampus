@@ -109,15 +109,17 @@ export function Card({ as: Tag = 'div', tone, hover, className, children, style,
 
 export function CardHead({ title, sub, right, icon: Icon, className }) {
   return (
-    <div className={cx('flex items-start justify-between gap-4 px-5 pt-5 pb-3', className)}>
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
+    <div className={cx('flex flex-wrap items-start gap-x-4 gap-y-3 px-5 pt-5 pb-3', className)}>
+      {/* The title keeps a real floor width, so a wide control on the right drops
+          onto its own row instead of crushing this column to a few characters. */}
+      <div className="min-w-0 flex-1 basis-[min(100%,220px)]">
+        <div className="flex items-center gap-2 min-w-0">
           {Icon ? <Icon size={16} className="t3 shrink-0" aria-hidden /> : null}
           <h3 className="display text-md font-bold truncate">{title}</h3>
         </div>
         {sub ? <p className="lede mt-1">{sub}</p> : null}
       </div>
-      {right ? <div className="flex items-center gap-2 shrink-0">{right}</div> : null}
+      {right ? <div className="flex items-center gap-2 flex-wrap max-w-full shrink-0">{right}</div> : null}
     </div>
   )
 }
@@ -537,10 +539,27 @@ export function ConfirmDialog({
   )
 }
 
-/** Anchored menu. `children` receives a close() through render-prop. */
+/**
+ * Anchored menu. A right-aligned menu inside a horizontally scrolling table can
+ * still hang past the viewport edge, so the position is measured on open and
+ * nudged back inside it. `children` receives close() through a render prop.
+ */
 export function Dropdown({ trigger, children, align = 'end', width = 'w-56', label }) {
   const [open, setOpen] = useState(false)
+  const [shift, setShift] = useState(0)
+  const box = useRef(null)
   const ref = useClickAway(() => setOpen(false), open)
+
+  useEffect(() => {
+    if (!open || !box.current) return
+    const r = box.current.getBoundingClientRect()
+    const vw = window.innerWidth
+    let dx = 0
+    if (r.right > vw - 8) dx = vw - 8 - r.right
+    if (r.left < 8) dx = 8 - r.left
+    setShift(dx)
+  }, [open])
+
   return (
     <div className="relative shrink-0" ref={ref}>
       {typeof trigger === 'function' ? trigger({ open, toggle: () => setOpen((o) => !o) }) : (
@@ -557,8 +576,10 @@ export function Dropdown({ trigger, children, align = 'end', width = 'w-56', lab
       )}
       {open ? (
         <div
+          ref={box}
           role="menu"
-          className={cx('pop absolute top-[calc(100%+8px)] z-50 p-1.5', align === 'end' ? 'right-0' : 'left-0', width)}
+          style={{ transform: shift ? `translateX(${shift}px)` : undefined }}
+          className={cx('pop absolute top-[calc(100%+8px)] z-50 p-1.5 max-w-[calc(100vw-16px)]', align === 'end' ? 'right-0' : 'left-0', width)}
         >
           {typeof children === 'function' ? children({ close: () => setOpen(false) }) : children}
         </div>
@@ -990,8 +1011,8 @@ export function PageHeader({ eyebrow, title, sub, actions, breadcrumbs, icon: Ic
   return (
     <header className={cx('flex flex-col gap-4', className)}>
       {breadcrumbs?.length ? <Breadcrumbs items={breadcrumbs} /> : null}
-      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+        <div className="min-w-0 flex-1 basis-[min(100%,260px)]">
           {eyebrow ? <p className="eyebrow mb-1.5">{eyebrow}</p> : null}
           <div className="flex items-center gap-3 min-w-0">
             {Icon ? (
@@ -999,11 +1020,11 @@ export function PageHeader({ eyebrow, title, sub, actions, breadcrumbs, icon: Ic
                 <Icon size={19} />
               </span>
             ) : null}
-            <h1 className="display text-xl sm:text-2xl font-extrabold truncate">{title}</h1>
+            <h1 className="display text-xl sm:text-2xl font-extrabold">{title}</h1>
           </div>
           {sub ? <p className="lede mt-2">{sub}</p> : null}
         </div>
-        {actions ? <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div> : null}
+        {actions ? <div className="flex flex-wrap items-center gap-2 shrink-0 max-w-full">{actions}</div> : null}
       </div>
     </header>
   )
@@ -1011,13 +1032,13 @@ export function PageHeader({ eyebrow, title, sub, actions, breadcrumbs, icon: Ic
 
 export function SectionTitle({ eyebrow, title, sub, right, className }) {
   return (
-    <div className={cx('flex flex-wrap items-end justify-between gap-3 mb-3.5', className)}>
-      <div className="min-w-0">
+    <div className={cx('flex flex-wrap items-end gap-x-4 gap-y-3 mb-3.5', className)}>
+      <div className="min-w-0 flex-1 basis-[min(100%,240px)]">
         {eyebrow ? <p className="eyebrow mb-1">{eyebrow}</p> : null}
         <h2 className="display text-lg font-bold">{title}</h2>
         {sub ? <p className="lede mt-1">{sub}</p> : null}
       </div>
-      {right ? <div className="flex items-center gap-2 flex-wrap">{right}</div> : null}
+      {right ? <div className="flex items-center gap-2 flex-wrap max-w-full shrink-0">{right}</div> : null}
     </div>
   )
 }
@@ -1027,16 +1048,20 @@ export function Stat({ label, value, sub, tone = 'brand', trend, icon: Icon, cla
   const down = typeof trend === 'number' && trend < 0
   return (
     <div data-tone={tone} className={cx('card p-4 flex flex-col gap-2 min-w-0', className)}>
-      <div className="flex items-start justify-between gap-3">
-        <p className="field-label mb-0">{label}</p>
+      <div className="flex items-start justify-between gap-2 min-w-0">
+        <p className="field-label mb-0 min-w-0 flex-1">{label}</p>
         {Icon ? (
-          <span className="avatar avatar-sm" data-tone={tone} aria-hidden>
+          <span className="avatar avatar-sm hidden sm:grid" data-tone={tone} aria-hidden>
             <Icon size={15} />
           </span>
         ) : null}
       </div>
-      <p className="num text-2xl font-extrabold t1 leading-none">{value}</p>
-      <div className="flex items-center gap-2 flex-wrap min-h-[18px]">
+      <p className="num text-xl sm:text-2xl font-extrabold t1 leading-none truncate" title={String(value)}>
+        {value}
+      </p>
+      {/* Two columns on a phone leaves roughly 170px per card; the supporting line
+          turns into a truncated fragment there, so it waits for a wider band. */}
+      <div className="hidden sm:flex items-center gap-2 flex-wrap min-h-[18px]">
         {typeof trend === 'number' ? (
           <span
             className={cx('text-2xs font-bold', up && 'text-[color:var(--color-success-ink)]', down && 'text-[color:var(--color-danger-ink)]')}

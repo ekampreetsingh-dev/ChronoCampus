@@ -90,20 +90,29 @@ function Sidebar({ role, collapsed, onToggle, onNavigate, mobile }) {
       }
       aria-label="Primary"
     >
-      <div className={`flex items-center gap-2 px-3 h-[62px] shrink-0 border-b border-[color:var(--color-line-soft)] ${collapsed && !mobile ? 'justify-center' : 'justify-between'}`}>
+      <div className={`flex items-center gap-2 px-3 h-[62px] shrink-0 overflow-hidden border-b border-[color:var(--color-line-soft)] ${collapsed && !mobile ? 'justify-center' : 'justify-between'}`}>
         <Brand compact={collapsed && !mobile} showWord={!collapsed || mobile} />
         {mobile ? (
           <IconButton label="Close menu" icon={X} onClick={onNavigate} />
-        ) : (
+        ) : collapsed ? null : (
           <IconButton
-            label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            icon={collapsed ? PanelLeftOpen : PanelLeftClose}
+            label="Collapse sidebar"
+            icon={PanelLeftClose}
             size="sm"
             onClick={onToggle}
-            className={collapsed ? 'hidden' : ''}
           />
         )}
       </div>
+
+      {/* Collapsed, the 74px column cannot hold the mark and the button side by
+          side — and hiding the button left no way back to the expanded rail. */}
+      {collapsed && !mobile ? (
+        <div className="flex justify-center py-2 shrink-0 border-b border-[color:var(--color-line-soft)]">
+          <Tooltip content="Expand sidebar" side="right">
+            <IconButton label="Expand sidebar" icon={PanelLeftOpen} size="sm" onClick={onToggle} />
+          </Tooltip>
+        </div>
+      ) : null}
 
       <NavList items={items} collapsed={collapsed && !mobile} role={role} />
 
@@ -141,8 +150,10 @@ function Topbar({ role, onOpenMenu, onOpenSearch, onOpenPalette }) {
   const crumb = useMemo(() => findCrumb(role, pathname), [role, pathname])
 
   return (
-    <header className="sticky top-0 z-40 shrink-0 h-[62px] flex items-center gap-2 sm:gap-3 px-3 sm:px-5 border-b border-[color:var(--color-line-soft)] bg-[color:var(--glass-1)] backdrop-blur-xl">
-      <IconButton label="Open menu" icon={Menu} className="lg:hidden" onClick={onOpenMenu} />
+    <header className="topbar-glass sticky top-0 z-40 shrink-0 h-[62px] flex items-center gap-2 sm:gap-3 px-3 sm:px-5 border-b border-[color:var(--color-line-soft)] bg-[color:var(--glass-1)] backdrop-blur-xl">
+      {/* Tablet only: the drawer is the tablet strategy, and on phones the bottom
+          bar plus More already own navigation — two menu buttons would compete. */}
+      <IconButton label="Open navigation" icon={Menu} className="hidden md:inline-flex lg:hidden" onClick={onOpenMenu} />
 
       <div className="min-w-0 flex-1">
         <p className="eyebrow truncate leading-none mb-1">{crumb?.group || role}</p>
@@ -193,7 +204,7 @@ function Topbar({ role, onOpenMenu, onOpenSearch, onOpenPalette }) {
             aria-expanded={open}
             aria-label="Account menu"
             onClick={toggle}
-            className="flex items-center gap-2 h-9 pl-1 pr-2 rounded-xl border border-[color:var(--color-line-soft)] bg-[color:var(--well)] hover:bg-[color:var(--well-hover)] transition-colors"
+            className="flex items-center gap-0 h-10 p-1 xl:gap-2 xl:pr-2 rounded-xl border border-[color:var(--color-line-soft)] bg-[color:var(--well)] hover:bg-[color:var(--well-hover)] transition-colors"
           >
             <Avatar name={profile?.full_name || 'Guest'} size="sm" tone="accent" />
             <span className="hidden xl:block text-xs font-bold t1 max-w-[110px] truncate">
@@ -252,67 +263,116 @@ function Topbar({ role, onOpenMenu, onOpenSearch, onOpenPalette }) {
 /** "My Timetable" → "Timetable": the first word alone is meaningless in a tab bar. */
 const shortLabel = (label) => String(label).replace(/^(My|Master)\s+/i, '').split(' ')[0] || label
 
+/** Locks the page behind an open overlay so the sheet and drawer never scroll
+    the document underneath them. */
+function useScrollLock(active) {
+  useEffect(() => {
+    if (!active) return undefined
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [active])
+}
+
+/**
+ * Mobile: a fixed bottom bar carries the three primary destinations, and More
+ * opens a grouped sheet with everything else. There is deliberately no hamburger
+ * here — two controls that both open "the menu" is the thing this replaces.
+ */
 function MobileNav({ role }) {
   const groups = NAV[role] || []
-  const flat = useMemo(() => groups.flatMap((g) => g.items), [groups])
+  const flat = useMemo(() => groups.flatMap((g) => g.items.map((i) => ({ ...i, group: g.group }))), [groups])
   const primary = flat.slice(0, 3)
-  const rest = flat.slice(3)
+  const rest = useMemo(() => {
+    const byGroup = []
+    for (const g of groups) {
+      const items = g.items.filter((i) => !primary.some((p) => p.to === i.to))
+      if (items.length) byGroup.push({ group: g.group, items })
+    }
+    return byGroup
+  }, [groups, primary])
   const [more, setMore] = useState(false)
+  const { pathname } = useLocation()
+  const sheet = useRef(null)
+
+  useScrollLock(more)
+
+  useEffect(() => {
+    if (!more) return undefined
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        setMore(false)
+      }
+    }
+    document.addEventListener('keydown', onKey, true)
+    sheet.current?.focus?.()
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [more])
+
+  // leaving the route closes the sheet, so a selection never leaves it hanging
+  useEffect(() => setMore(false), [pathname])
 
   return (
     <>
-      <nav
-        aria-label="Primary mobile"
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 flex items-stretch gap-1 px-2 pt-1.5 pb-[max(6px,env(safe-area-inset-bottom))] border-t border-[color:var(--color-line)] bg-[color:var(--glass-3)] backdrop-blur-2xl"
-      >
+      <nav aria-label="Primary mobile" className="bottombar md:hidden">
         {primary.map((it) => (
           <NavLink
             key={it.to}
             to={it.to}
             end={it.end}
-            className={({ isActive }) =>
-              `flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl text-2xs font-bold transition-colors ${
-                isActive ? 'bg-[color:var(--selected)] text-[color:var(--color-brand-ink)]' : 't3'
-              }`
-            }
+            className={({ isActive }) => `bottombar-item ${isActive ? 'is-active' : ''}`}
           >
-            <it.icon size={19} aria-hidden />
-            <span className="truncate max-w-full px-1">{shortLabel(it.label)}</span>
+            <it.icon size={20} aria-hidden />
+            <span className="bottombar-label">{shortLabel(it.label)}</span>
           </NavLink>
         ))}
         <button
           type="button"
           onClick={() => setMore(true)}
-          className="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl text-2xs font-bold t3"
-          aria-label="More navigation"
+          aria-haspopup="dialog"
+          aria-expanded={more}
+          className={`bottombar-item ${more ? 'is-active' : ''}`}
         >
-          <MoreHorizontal size={19} aria-hidden />
-          <span>More</span>
+          <MoreHorizontal size={20} aria-hidden />
+          <span className="bottombar-label">More</span>
         </button>
       </nav>
 
       {more ? (
-        <div className="lg:hidden fixed inset-0 z-50 flex items-end">
+        <div className="fixed inset-0 z-[60] md:hidden">
           <div className="scrim" onClick={() => setMore(false)} aria-hidden />
-          <div className="pop relative w-full rounded-t-[24px] p-4 pb-[max(20px,env(safe-area-inset-bottom))] max-h-[70vh] overflow-y-auto scroll">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="display text-md font-bold">All sections</h2>
-              <IconButton label="Close" icon={X} size="sm" onClick={() => setMore(false)} />
+          <div ref={sheet} className="sheet" role="dialog" aria-modal="true" aria-label="All sections" tabIndex={-1}>
+            <span className="sheet-grabber" aria-hidden />
+            <div className="flex items-center justify-between gap-3 px-4 pt-1 pb-3 shrink-0">
+              <h2 className="display text-lg font-bold">All sections</h2>
+              <IconButton label="Close menu" icon={X} onClick={() => setMore(false)} />
             </div>
-            <ul className="grid grid-cols-2 gap-2 list-none m-0 p-0">
-              {rest.map((it) => (
-                <li key={it.to}>
-                  <NavLink
-                    to={it.to}
-                    onClick={() => setMore(false)}
-                    className={({ isActive }) => `nav-item ${isActive ? 'is-active' : ''}`}
-                  >
-                    <it.icon size={18} aria-hidden />
-                    <span className="truncate">{it.label}</span>
-                  </NavLink>
-                </li>
+            <div className="scroll overflow-y-auto px-4 pb-2 min-h-0">
+              {rest.map((g) => (
+                <div key={g.group} className="mb-4">
+                  <p className="nav-group-label">{g.group}</p>
+                  <ul className="list-none m-0 p-0 space-y-1">
+                    {g.items.map((it) => (
+                      <li key={it.to}>
+                        <NavLink
+                          to={it.to}
+                          end={it.end}
+                          className={({ isActive }) => `nav-item ${isActive ? 'is-active' : ''}`}
+                          aria-current={undefined}
+                        >
+                          <it.icon size={19} aria-hidden />
+                          <span className="truncate">{it.label}</span>
+                        </NavLink>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ))}
-            </ul>
+              {!rest.length ? <p className="text-sm t3 pb-3">Everything is already on the bar.</p> : null}
+            </div>
           </div>
         </div>
       ) : null}
@@ -362,6 +422,16 @@ export default function AppShell({ role, children, actions }) {
     shellRef.current?.scrollTo?.({ top: 0 })
   }, [location.pathname])
 
+  // the tablet drawer behaves like a dialog: Escape closes it, page locks behind it
+  useEffect(() => {
+    if (!mobileMenu) return undefined
+    const onKey = (e) => e.key === 'Escape' && setMobileMenu(false)
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [mobileMenu])
+
+  useScrollLock(mobileMenu)
+
   const value = useMemo(
     () => ({ openPalette: () => setPalette(true), openMenu: () => setMobileMenu(true) }),
     [],
@@ -370,21 +440,24 @@ export default function AppShell({ role, children, actions }) {
   return (
     <ShellCtx.Provider value={value}>
       <div className="relative z-10 lg:p-3 2xl:p-4">
-        <div className="shell flex lg:min-h-[calc(100dvh-24px)] 2xl:lg:min-h-[calc(100dvh-32px)]">
+        {/* On desktop the shell is exactly the viewport tall and only <main>
+            scrolls. With min-height instead, a long page grew the shell and the
+            sidebar scrolled away with it — the rail ended up above the viewport. */}
+        <div className="shell flex lg:h-[calc(100dvh-24px)] lg:overflow-hidden 2xl:lg:h-[calc(100dvh-32px)]">
           <div className="hidden lg:flex h-full">
             <Sidebar role={role} collapsed={collapsed} onToggle={toggleRail} />
           </div>
 
           {mobileMenu ? (
-            <div className="lg:hidden fixed inset-0 z-50">
+            <div className="fixed inset-0 z-[60] hidden md:block lg:hidden">
               <div className="scrim" onClick={() => setMobileMenu(false)} aria-hidden />
-              <div className="absolute inset-y-0 left-0 w-[270px] max-w-[86vw] shadow-[var(--shadow-pop)]">
+              <div className="nav-drawer absolute inset-y-0 left-0">
                 <Sidebar role={role} mobile onNavigate={() => setMobileMenu(false)} onToggle={toggleRail} />
               </div>
             </div>
           ) : null}
 
-          <div className="flex-1 min-w-0 flex flex-col">
+          <div className="flex-1 min-w-0 flex flex-col lg:overflow-hidden">
             <Topbar
               role={role}
               onOpenMenu={() => setMobileMenu(true)}
@@ -396,7 +469,7 @@ export default function AppShell({ role, children, actions }) {
             <main
               ref={shellRef}
               key={location.pathname}
-              className="flex-1 min-w-0 px-4 sm:px-6 lg:px-7 py-5 pb-24 lg:pb-8 rise"
+              className="flex-1 min-w-0 min-h-0 px-4 sm:px-6 lg:px-7 py-5 pb-[calc(var(--nav-bar-h)+28px)] md:pb-8 lg:pb-8 lg:overflow-y-auto rise"
             >
               {children ?? <Outlet />}
             </main>

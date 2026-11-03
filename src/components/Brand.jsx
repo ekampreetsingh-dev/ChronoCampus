@@ -28,19 +28,24 @@ export function Mark({ size = 34, className }) {
 }
 
 export default function Brand({ compact, to = '/', showWord = true }) {
+  // A compact rail must never paint its wordmark: the 74px column squeezes the
+  // text box to nothing while the glyphs overflow and land on the header.
+  const word = showWord && !compact
   return (
     <NavLink
       to={to}
-      className={`flex items-center gap-2.5 min-w-0 rounded-xl ${compact ? 'px-1' : 'px-1'} transition-opacity hover:opacity-90`}
+      className={`flex items-center gap-2.5 min-w-0 rounded-xl px-1 ${word ? 'overflow-hidden' : ''}`}
       aria-label="ChronoCampus home"
     >
       <Mark size={compact ? 30 : 34} className="shrink-0" />
-      {showWord ? (
-        <span className="min-w-0">
-          <span className="block display text-md font-extrabold leading-none tracking-tight t1">
+      {word ? (
+        <span className="min-w-0 overflow-hidden">
+          <span className="block display text-md font-extrabold leading-none tracking-tight t1 whitespace-nowrap">
             Chrono<span style={{ color: 'var(--text-accent)' }}>Campus</span>
           </span>
-          <span className="block text-2xs t3 font-semibold tracking-[0.09em] uppercase mt-1">Academic Ops</span>
+          <span className="block text-2xs t3 font-semibold tracking-[0.09em] uppercase mt-1 whitespace-nowrap">
+            Academic Ops
+          </span>
         </span>
       ) : null}
     </NavLink>

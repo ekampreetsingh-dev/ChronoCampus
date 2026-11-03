@@ -2828,12 +2828,20 @@ export const db = {
 
 const row2hint = (p) => `${p.slice(0, 3)}••••-${p.split('-')[1]}-•••`
 
+/**
+ * Relative label for a stored instant. A future timestamp must never read as
+ * "just now" — that would present something that has not happened as history —
+ * so the sign is kept and the wording follows it.
+ */
 function relativeTime(iso) {
   const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  if (mins < 1440) return `${Math.round(mins / 60)}h ago`
-  return `${Math.round(mins / 1440)}d ago`
+  const future = mins < 0
+  const abs = Math.abs(mins)
+  if (abs < 1) return 'just now'
+  const unit =
+    abs < 60 ? `${abs}m` : abs < 1440 ? `${Math.round(abs / 60)}h` : abs < 43200 ? `${Math.round(abs / 1440)}d` : new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  if (unit.includes('/')) return unit
+  return future ? `in ${unit}` : `${unit} ago`
 }
 
 export { nowInTimezone }
